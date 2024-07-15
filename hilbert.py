@@ -1,6 +1,6 @@
 import pygame
 from dataclasses import dataclass
-from typing import Tuple, List
+from typing import Tuple, List, Self
 import math
 
 WINDOW_WIDTH = 800
@@ -44,6 +44,13 @@ class Vec2Int:
         return (self.x, self.y)
 
 
+# bounded in [0,1]
+@dataclass
+class FrameCoord:
+    x: float
+    y: float
+
+
 @dataclass
 class Frame:
     top_left: Vec2Int
@@ -51,7 +58,7 @@ class Frame:
 
     # returns four frames according to how
     # hilbert curves are constructed
-    def hilbert_split(self):
+    def hilbert_split(self) -> Tuple["Frame", "Frame", "Frame", "Frame"]:
         left_x, top_y = self.top_left.destructure()
         right_x, bottom_y = self.bottom_right.destructure()
         mid_x, mid_y = ((self.top_left + self.bottom_right) / 2).destructure()
@@ -66,20 +73,23 @@ class Frame:
         return (bl_frame, tl_frame, tr_frame, br_frame)
 
     # frame coords should be in [0,1]
-    def real_coords(self, frame_coord):
+    def real_coords(self, frame_coord: FrameCoord) -> Vec2:
         left_x, top_y = self.top_left.destructure()
         right_x, bottom_y = self.bottom_right.destructure()
 
-        x = left_x + frame_coord[0] * (right_x - left_x)
-        y = top_y + frame_coord[1] * (bottom_y - top_y)
+        x = left_x + frame_coord.x * (right_x - left_x)
+        y = top_y + frame_coord.y * (bottom_y - top_y)
 
-        return (x, y)
+        return Vec2(x, y)
 
 
 @dataclass
 class FilledFrame:
     frame: Frame
-    lines: List[Tuple[Vec2, Vec2]]
+    lines: List[Tuple[FrameCoord, FrameCoord]]
+
+    def add_line(self, start_pos: FrameCoord, end_pos: FrameCoord):
+        self.lines.append((start_pos, end_pos))
 
 
 @dataclass
@@ -104,33 +114,21 @@ class MathCoord:
         return (x, y)
 
 
-def add_line(frame: Frame, start_pos: MathCoord, end_pos: MathCoord):
-    frame_start_pos = start_pos.rotated(frame.rotation).to_frame_coordinate()
-    frame_end_pos = end_pos.rotated(frame.rotation).to_frame_coordinate()
-
-    pygame.draw.line(
-        screen,
-        (255, 255, 255),
-        frame.real_coords(frame_start_pos),
-        frame.real_coords(frame_end_pos),
-    )
-
-
 def pseudo_hilbert_curve(frame, order) -> FilledFrame:
     if order > 1:
         smaller_frames = frame.hilbert_split()
-        tr = pseudo_hilbert_curve(screen, smaller_frames[0], order - 1)
-        tl = pseudo_hilbert_curve(screen, smaller_frames[1], order - 1)
-        br = pseudo_hilbert_curve(screen, smaller_frames[2], order - 1).rotate(1)
-        bl = pseudo_hilbert_curve(screen, smaller_frames[3], order - 1).rotate(-1)
+        tr = pseudo_hilbert_curve(smaller_frames[0], order - 1)
+        tl = pseudo_hilbert_curve(smaller_frames[1], order - 1)
+        br = pseudo_hilbert_curve(smaller_frames[2], order - 1).rotate(1)
+        bl = pseudo_hilbert_curve(smaller_frames[3], order - 1).rotate(-1)
 
         return FilledFrame.compose(frame, (bl, tl, tr, br))
 
     else:
         to_ret = FilledFrame(frame, [])
-        to_ret.add_line(frame, MathCoord(-0.5, -0.5), MathCoord(-0.5, 0.5))
-        to_ret.add_line(frame, MathCoord(-0.5, 0.5), MathCoord(0.5, 0.5))
-        to_ret.add_line(frame, MathCoord(0.5, 0.5), MathCoord(0.5, -0.5))
+        to_ret.add_line(FrameCoord(0.25, 0.75), FrameCoord(0.25, 0.25))
+        to_ret.add_line(FrameCoord(0.25, 0.25), FrameCoord(0.75, 0.25))
+        to_ret.add_line(FrameCoord(0.75, 0.25), FrameCoord(0.75, 0.75))
 
         return to_ret
 
@@ -149,7 +147,7 @@ def mainLoop():
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     t = 0
 
-    frame = Frame((0, 0), (WINDOW_WIDTH, WINDOW_HEIGHT), 0)
+    frame = Frame(Vec2Int(0, 0), Vec2Int(WINDOW_WIDTH, WINDOW_HEIGHT))
     to_render = pseudo_hilbert_curve(frame, 3)
 
     while not exit:
