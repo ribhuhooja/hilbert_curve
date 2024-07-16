@@ -95,7 +95,11 @@ class Frame:
         return Vec2(x, y)
 
     def frame_coords_of(self, real_coords: Vec2) -> FrameCoord:
-        pass
+        left_x, top_y = self.top_left.destructure()
+        right_x, bottom_y = self.bottom_right.destructure()
+        frame_x = (real_coords.x - left_x) / (right_x - left_x)
+        frame_y = (real_coords.y - top_y) / (bottom_y - top_y)
+        return FrameCoord(frame_x, frame_y)
 
 
 @dataclass
@@ -108,7 +112,11 @@ class FilledFrame:
 
     def rotate(self, angle_factor: int) -> Self:
         angle = angle_factor * math.pi / 2
-        map(lambda line: (line[0].rotated(angle), line[1].rotated(angle)), self.lines)
+        for i in range(len(self.lines)):
+            line = self.lines[i]
+            new_start = line[0].rotated(angle)
+            new_end = line[1].rotated(angle)
+            self.lines[i] = (new_start, new_end)
         return self
 
     def subsume(self, other: "FilledFrame"):
@@ -120,14 +128,17 @@ class FilledFrame:
             new_end_pos = self.frame.frame_coords_of(other.frame.real_coords(end_pos))
             self.add_line(new_start_pos, new_end_pos)
 
+    def real_coords(self, frame_coords: FrameCoord) -> Vec2:
+        return self.frame.real_coords(frame_coords)
+
 
 def pseudo_hilbert_curve(frame, order) -> FilledFrame:
     if order > 1:
         smaller_frames = frame.hilbert_split()
-        tr = pseudo_hilbert_curve(smaller_frames[0], order - 1)
+        bl = pseudo_hilbert_curve(smaller_frames[0], order - 1).rotate(1)
         tl = pseudo_hilbert_curve(smaller_frames[1], order - 1)
-        br = pseudo_hilbert_curve(smaller_frames[2], order - 1).rotate(1)
-        bl = pseudo_hilbert_curve(smaller_frames[3], order - 1).rotate(-1)
+        tr = pseudo_hilbert_curve(smaller_frames[2], order - 1)
+        br = pseudo_hilbert_curve(smaller_frames[3], order - 1).rotate(-1)
 
         result = FilledFrame(frame, [])
         result.subsume(bl)
@@ -146,10 +157,10 @@ def pseudo_hilbert_curve(frame, order) -> FilledFrame:
         return to_ret
 
 
-def render(screen, frame, t):
+def render(screen, frame: FilledFrame, t):
     for line in frame.lines:
-        start_pos = int(line[0].x), int(line[0].y)
-        end_pos = int(line[1].x), int(line[1].y)
+        start_pos = frame.real_coords(line[0]).to_int().destructure()
+        end_pos = frame.real_coords(line[1]).to_int().destructure()
         pygame.draw.line(screen, (255, 255, 255), start_pos, end_pos)
     pygame.display.update()
 
