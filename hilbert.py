@@ -119,6 +119,13 @@ class FilledFrame:
             self.lines[i] = (new_start, new_end)
         return self
 
+    def reorient(self):
+        self.lines = self.lines[::-1]
+        for i in range(len(self.lines)):
+            line = self.lines[i]
+            self.lines[i] = (line[1], line[0])
+        return self
+
     def subsume(self, other: "FilledFrame"):
         for line in other.lines:
             start_pos, end_pos = line
@@ -128,6 +135,18 @@ class FilledFrame:
             new_end_pos = self.frame.frame_coords_of(other.frame.real_coords(end_pos))
             self.add_line(new_start_pos, new_end_pos)
 
+    def subsume_with_connection(self, other: "FilledFrame"):
+        if len(self.lines) == 0:
+            self.subsume(other)
+            return
+
+        end_pos_of_last_line = self.lines[-1][1]
+        start_pos_of_first_line = self.frame.frame_coords_of(
+            other.frame.real_coords(other.lines[0][0])
+        )
+        self.add_line(end_pos_of_last_line, start_pos_of_first_line)
+        self.subsume(other)
+
     def real_coords(self, frame_coords: FrameCoord) -> Vec2:
         return self.frame.real_coords(frame_coords)
 
@@ -135,16 +154,16 @@ class FilledFrame:
 def pseudo_hilbert_curve(frame, order) -> FilledFrame:
     if order > 1:
         smaller_frames = frame.hilbert_split()
-        bl = pseudo_hilbert_curve(smaller_frames[0], order - 1).rotate(1)
+        bl = pseudo_hilbert_curve(smaller_frames[0], order - 1).rotate(1).reorient()
         tl = pseudo_hilbert_curve(smaller_frames[1], order - 1)
         tr = pseudo_hilbert_curve(smaller_frames[2], order - 1)
-        br = pseudo_hilbert_curve(smaller_frames[3], order - 1).rotate(-1)
+        br = pseudo_hilbert_curve(smaller_frames[3], order - 1).rotate(-1).reorient()
 
         result = FilledFrame(frame, [])
         result.subsume(bl)
-        result.subsume(tl)
-        result.subsume(tr)
-        result.subsume(br)
+        result.subsume_with_connection(tl)
+        result.subsume_with_connection(tr)
+        result.subsume_with_connection(br)
 
         return result
 
@@ -165,23 +184,32 @@ def render(screen, frame: FilledFrame, t):
     pygame.display.update()
 
 
+def clear_screen(screen):
+    screen.fill((0, 0, 0))
+
+
 def mainLoop():
     exit = False
     clock = pygame.time.Clock()
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     t = 0
+    order = 1
 
     frame = Frame(Vec2Int(0, 0), Vec2Int(WINDOW_WIDTH, WINDOW_HEIGHT))
-    to_render = pseudo_hilbert_curve(frame, 3)
 
     while not exit:
         t += clock.tick(FPS)
+        to_render = pseudo_hilbert_curve(frame, order)
         render(screen, to_render, t)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 exit = True
                 break
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    clear_screen(screen)
+                    order += 1
 
 
 if __name__ == "__main__":
