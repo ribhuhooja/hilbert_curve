@@ -50,6 +50,18 @@ class FrameCoord:
     x: float
     y: float
 
+    def rotated(self, angle: float) -> "FrameCoord":
+        math_x = 2 * self.x - 1
+        math_y = 1 - 2 * self.y
+        sin = math.sin(angle)
+        cos = math.cos(angle)
+
+        u = math_x * cos + math_y * sin
+        v = math_x * (-sin) + math_y * cos
+        x = (u + 1) / 2
+        y = 1 - (v + 1) / 2
+        return FrameCoord(x, y)
+
 
 @dataclass
 class Frame:
@@ -82,6 +94,9 @@ class Frame:
 
         return Vec2(x, y)
 
+    def frame_coords_of(self, real_coords: Vec2) -> FrameCoord:
+        pass
+
 
 @dataclass
 class FilledFrame:
@@ -91,27 +106,19 @@ class FilledFrame:
     def add_line(self, start_pos: FrameCoord, end_pos: FrameCoord):
         self.lines.append((start_pos, end_pos))
 
+    def rotate(self, angle_factor: int) -> Self:
+        angle = angle_factor * math.pi / 2
+        map(lambda line: (line[0].rotated(angle), line[1].rotated(angle)), self.lines)
+        return self
 
-@dataclass
-class MathCoord:
-    # both should be between -1 and 1
-    x: float
-    y: float
-
-    # frame angle is in multiples of pi/2
-    def rotated(self, frame_angle):
-        x, y = self.x, self.y
-        sin = math.sin(math.pi * frame_angle / 2)
-        cos = math.cos(math.pi * frame_angle / 2)
-        u = x * cos + y * sin
-        v = x * (-sin) + y * cos
-
-        return MathCoord(u, v)
-
-    def to_frame_coordinate(self):
-        x = (self.x + 1) / 2
-        y = 1 - (self.y + 1) / 2
-        return (x, y)
+    def subsume(self, other: "FilledFrame"):
+        for line in other.lines:
+            start_pos, end_pos = line
+            new_start_pos = self.frame.frame_coords_of(
+                other.frame.real_coords(start_pos)
+            )
+            new_end_pos = self.frame.frame_coords_of(other.frame.real_coords(end_pos))
+            self.add_line(new_start_pos, new_end_pos)
 
 
 def pseudo_hilbert_curve(frame, order) -> FilledFrame:
@@ -122,7 +129,13 @@ def pseudo_hilbert_curve(frame, order) -> FilledFrame:
         br = pseudo_hilbert_curve(smaller_frames[2], order - 1).rotate(1)
         bl = pseudo_hilbert_curve(smaller_frames[3], order - 1).rotate(-1)
 
-        return FilledFrame.compose(frame, (bl, tl, tr, br))
+        result = FilledFrame(frame, [])
+        result.subsume(bl)
+        result.subsume(tl)
+        result.subsume(tr)
+        result.subsume(br)
+
+        return result
 
     else:
         to_ret = FilledFrame(frame, [])
