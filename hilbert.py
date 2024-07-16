@@ -150,6 +150,15 @@ class FilledFrame:
     def real_coords(self, frame_coords: FrameCoord) -> Vec2:
         return self.frame.real_coords(frame_coords)
 
+    def to_rendering_queue(self) -> "RenderingQueue":
+        new_frame = RenderingQueue()
+        for line in self.lines:
+            start_pos = self.real_coords(line[0]).to_int()
+            end_pos = self.real_coords(line[1]).to_int()
+            new_frame.lines.append((start_pos, end_pos))
+
+        return new_frame
+
 
 def pseudo_hilbert_curve(frame, order) -> FilledFrame:
     if order > 1:
@@ -183,18 +192,13 @@ PALETTE_END = (0, 255, 0)
 
 
 @dataclass
-class RenderingFrame:
+class RenderingQueue:
     lines: List[Tuple[Vec2Int, Vec2Int]]
+    lines_drawn: int
 
-    @staticmethod
-    def from_filled_frame(frame: FilledFrame):
-        new_frame = RenderingFrame([])
-        for line in frame.lines:
-            start_pos = frame.real_coords(line[0]).to_int()
-            end_pos = frame.real_coords(line[1]).to_int()
-            new_frame.lines.append((start_pos, end_pos))
-
-        return new_frame
+    def __init__(self) -> None:
+        self.lines = []
+        self.lines_drawn = 0
 
 
 def lerp(first, second, frac):
@@ -211,7 +215,7 @@ def lerp_color(
     return (r, g, b)
 
 
-def render(screen, frame: RenderingFrame, t):
+def render(screen, frame: RenderingQueue, t):
     total_lines = len(frame.lines)
     lines_drawn = 0
     for line in frame.lines:
@@ -243,9 +247,7 @@ def mainLoop():
     while not exit:
         t += clock.tick(FPS)
         if not rendered:
-            to_render = RenderingFrame.from_filled_frame(
-                pseudo_hilbert_curve(frame, order)
-            )
+            to_render = pseudo_hilbert_curve(frame, order).to_rendering_queue()
             render(screen, to_render, t)
             rendered = True
 
