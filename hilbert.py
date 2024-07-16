@@ -176,11 +176,50 @@ def pseudo_hilbert_curve(frame, order) -> FilledFrame:
         return to_ret
 
 
-def render(screen, frame: FilledFrame, t):
+###################################### GRAPHICS STUFF #########################
+
+PALETTE_START = (255, 0, 0)
+PALETTE_END = (0, 255, 0)
+
+
+@dataclass
+class RenderingFrame:
+    lines: List[Tuple[Vec2Int, Vec2Int]]
+
+    @staticmethod
+    def from_filled_frame(frame: FilledFrame):
+        new_frame = RenderingFrame([])
+        for line in frame.lines:
+            start_pos = frame.real_coords(line[0]).to_int()
+            end_pos = frame.real_coords(line[1]).to_int()
+            new_frame.lines.append((start_pos, end_pos))
+
+        return new_frame
+
+
+def lerp(first, second, frac):
+    return first + frac * (second - first)
+
+
+def lerp_color(
+    first: Tuple[int, int, int], second: Tuple[int, int, int], frac
+) -> Tuple[int, int, int]:
+    r = int(lerp(first[0], second[0], frac))
+    g = int(lerp(first[1], second[1], frac))
+    b = int(lerp(first[2], second[2], frac))
+
+    return (r, g, b)
+
+
+def render(screen, frame: RenderingFrame, t):
+    total_lines = len(frame.lines)
+    lines_drawn = 0
     for line in frame.lines:
-        start_pos = frame.real_coords(line[0]).to_int().destructure()
-        end_pos = frame.real_coords(line[1]).to_int().destructure()
-        pygame.draw.line(screen, (255, 255, 255), start_pos, end_pos)
+        color = lerp_color(PALETTE_START, PALETTE_END, lines_drawn / total_lines)
+        start_pos = line[0].destructure()
+        end_pos = line[1].destructure()
+        pygame.draw.line(screen, color, start_pos, end_pos)
+        lines_drawn += 1
     pygame.display.update()
 
 
@@ -188,8 +227,12 @@ def clear_screen(screen):
     screen.fill((0, 0, 0))
 
 
+####################################### MAIN LOOP #############################
+
+
 def mainLoop():
     exit = False
+    rendered = False
     clock = pygame.time.Clock()
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     t = 0
@@ -199,8 +242,12 @@ def mainLoop():
 
     while not exit:
         t += clock.tick(FPS)
-        to_render = pseudo_hilbert_curve(frame, order)
-        render(screen, to_render, t)
+        if not rendered:
+            to_render = RenderingFrame.from_filled_frame(
+                pseudo_hilbert_curve(frame, order)
+            )
+            render(screen, to_render, t)
+            rendered = True
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -210,6 +257,7 @@ def mainLoop():
                 if event.key == pygame.K_SPACE:
                     clear_screen(screen)
                     order += 1
+                    rendered = False
 
 
 if __name__ == "__main__":
