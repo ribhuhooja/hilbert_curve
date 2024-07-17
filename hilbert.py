@@ -5,7 +5,7 @@ import math
 
 WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 800
-FPS = 60
+FPS = 300
 
 
 @dataclass
@@ -157,6 +157,7 @@ class FilledFrame:
             end_pos = self.real_coords(line[1]).to_int()
             new_frame.lines.append((start_pos, end_pos))
 
+        new_frame.total_lines = len(new_frame.lines)  # TODO: fix this shit
         return new_frame
 
 
@@ -189,6 +190,7 @@ def pseudo_hilbert_curve(frame, order) -> FilledFrame:
 
 PALETTE_START = (255, 0, 0)
 PALETTE_END = (0, 255, 0)
+TOTAL_FRAMES = 100
 
 
 @dataclass
@@ -199,6 +201,21 @@ class RenderingQueue:
     def __init__(self) -> None:
         self.lines = []
         self.lines_drawn = 0
+        self.total_lines = 0
+
+    def pop_lines(self, total_frames: int):
+        if len(self.lines) == 0:
+            return []
+        self.lines_drawn += 1
+        return [self.lines.pop(0)]
+        # if len(self.lines) == 0:
+        #    return []
+        # to_ret = []
+        # for _ in range(int(len(self.lines) / total_frames)):
+        #    self.lines_drawn += 1
+        #    to_ret.append(self.lines.pop(0))
+
+        # return to_ret
 
 
 def lerp(first, second, frac):
@@ -215,10 +232,10 @@ def lerp_color(
     return (r, g, b)
 
 
-def render(screen, frame: RenderingQueue, t):
-    total_lines = len(frame.lines)
-    lines_drawn = 0
-    for line in frame.lines:
+def render(screen, frame: RenderingQueue):
+    total_lines = frame.total_lines
+    lines_drawn = frame.lines_drawn
+    for line in frame.pop_lines(TOTAL_FRAMES):
         color = lerp_color(PALETTE_START, PALETTE_END, lines_drawn / total_lines)
         start_pos = line[0].destructure()
         end_pos = line[1].destructure()
@@ -236,20 +253,18 @@ def clear_screen(screen):
 
 def mainLoop():
     exit = False
-    rendered = False
     clock = pygame.time.Clock()
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-    t = 0
+    frame_number = 0
     order = 1
 
     frame = Frame(Vec2Int(0, 0), Vec2Int(WINDOW_WIDTH, WINDOW_HEIGHT))
+    to_render = pseudo_hilbert_curve(frame, order).to_rendering_queue()
 
     while not exit:
-        t += clock.tick(FPS)
-        if not rendered:
-            to_render = pseudo_hilbert_curve(frame, order).to_rendering_queue()
-            render(screen, to_render, t)
-            rendered = True
+        clock.tick(FPS)
+        frame_number += 1
+        render(screen, to_render)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -259,7 +274,8 @@ def mainLoop():
                 if event.key == pygame.K_SPACE:
                     clear_screen(screen)
                     order += 1
-                    rendered = False
+                    frame_number = 0
+                    to_render = pseudo_hilbert_curve(frame, order).to_rendering_queue()
 
 
 if __name__ == "__main__":
